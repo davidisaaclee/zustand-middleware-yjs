@@ -55,6 +55,18 @@ const yjs: YjsImpl = <S extends unknown>(
   // Augment the store.
   return (set, get, api) =>
   {
+    const originalApi = { ...api, };
+    /*
+     * Zustand does not use the returned `api` - mutate so that our changes
+     * propagate to the outside.
+     */
+    api.setState = (partial, replace) =>
+    {
+      originalApi.setState(partial, replace);
+      doc.transact(() =>
+        patchSharedType(map, api.getState()));
+    };
+
     /*
      * Capture the initial state so that we can initialize the Yjs store to the
      * same values as the initial values of the Zustand store.
@@ -71,16 +83,7 @@ const yjs: YjsImpl = <S extends unknown>(
           patchSharedType(map, get()));
       },
       get,
-      {
-        ...api,
-        // Create a new setState function as we did with set.
-        "setState": (partial, replace) =>
-        {
-          api.setState(partial, replace);
-          doc.transact(() =>
-            patchSharedType(map, api.getState()));
-        },
-      }
+      api
     );
 
     /*
@@ -90,7 +93,7 @@ const yjs: YjsImpl = <S extends unknown>(
      */
     map.observeDeep(() =>
     {
-      patchStore(api, map.toJSON());
+      patchStore(originalApi, map.toJSON());
     });
 
     // Return the initial state to create or the next middleware.
