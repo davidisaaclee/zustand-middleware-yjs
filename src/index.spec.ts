@@ -906,4 +906,34 @@ describe("Yjs middleware in React", () =>
     expect(doc2.getMap("hello").get("count")).toBe(1); // Sanity check
     expect(result2.current.count).toBe(1); // Actual issue
   });
+
+  it('Updates ydoc on setState calls.', () => {
+    type Store =
+    {
+      count: number,
+      increment: () => void,
+    };
+
+    const doc = new Y.Doc();
+
+    const updateSpy = jest.fn();
+    doc.on("update", updateSpy);
+
+    const { setState } =
+      createVanilla<Store>(yjs(
+        doc,
+        'store',
+        (set) =>
+          ({
+            "count": 0,
+            "increment": () =>
+              set((state) =>
+                ({ "count": state.count + 1, })),
+          })
+      ));
+
+    expect(updateSpy).toHaveBeenCalledTimes(0);
+    setState((state) => ({ "count": state.count + 1, }));
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+  });
 });
