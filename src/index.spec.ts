@@ -920,7 +920,7 @@ describe("Yjs middleware in React", () =>
     const updateSpy = jest.fn();
     doc.on("update", updateSpy);
 
-    const { setState, } =
+    const store =
       createVanilla<Store>(yjs(
         doc,
         "store",
@@ -933,9 +933,14 @@ describe("Yjs middleware in React", () =>
           })
       ));
 
+    const storeUpdateSpy = jest.fn();
+    store.subscribe(storeUpdateSpy);
+
     expect(updateSpy).toHaveBeenCalledTimes(0);
-    setState((state) =>
+    expect(storeUpdateSpy).toHaveBeenCalledTimes(0);
+    store.setState((state) =>
       ({ "count": state.count + 1, }));
     expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(storeUpdateSpy).toHaveBeenCalledTimes(1);
   });
 });
