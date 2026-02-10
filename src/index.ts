@@ -49,21 +49,26 @@ const yjs: YjsImpl = <S extends unknown>(
   config: StateCreator<S>
 ): StateCreator<S> =>
 {
+  // A value to identify Yjs transactions that we have initiated.
+  const selfTxnOrigin = Symbol();
+
   // The root Y.Map that the store is written and read from.
   const map: Y.Map<any> = doc.getMap(name);
 
   // Augment the store.
   return (set, get, api) =>
   {
-    const originalSetState = api.setState.bind(api);
-    // Zustand does not use the returned `api` - mutate so that our changes
-    // propagate to the outside.
+    const originalApi = { ...api, };
+    /*
+     * Zustand does not use the returned `api` - mutate so that our changes
+     * propagate to the outside.
+     */
     api.setState = (partial, replace) =>
-      {
-        originalSetState(partial, replace);
-        doc.transact(() =>
-          patchSharedType(map, api.getState()));
-      };
+    {
+      originalApi.setState(partial, replace);
+      doc.transact(() =>
+        patchSharedType(map, api.getState()), selfTxnOrigin);
+    };
 
     /*
      * Capture the initial state so that we can initialize the Yjs store to the
@@ -78,7 +83,7 @@ const yjs: YjsImpl = <S extends unknown>(
       {
         set(partial, replace);
         doc.transact(() =>
-          patchSharedType(map, get()));
+          patchSharedType(map, get()), selfTxnOrigin);
       },
       get,
       api
@@ -89,9 +94,10 @@ const yjs: YjsImpl = <S extends unknown>(
      * Zustand store. We avoid using the Yjs enabled set to prevent unnecessary
      * ping-pong of updates.
      */
-    map.observeDeep(() =>
+    map.observeDeep((_events, txn) =>
     {
-      patchStore(api, map.toJSON());
+      if (txn.origin === selfTxnOrigin) return;
+      patchStore(originalApi, map.toJSON());
     });
 
     // Return the initial state to create or the next middleware.

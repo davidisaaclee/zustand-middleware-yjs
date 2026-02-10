@@ -907,7 +907,8 @@ describe("Yjs middleware in React", () =>
     expect(result2.current.count).toBe(1); // Actual issue
   });
 
-  it('Updates ydoc on setState calls.', () => {
+  it("Updates ydoc on setState calls.", () =>
+  {
     type Store =
     {
       count: number,
@@ -919,10 +920,10 @@ describe("Yjs middleware in React", () =>
     const updateSpy = jest.fn();
     doc.on("update", updateSpy);
 
-    const { setState } =
+    const store =
       createVanilla<Store>(yjs(
         doc,
-        'store',
+        "store",
         (set) =>
           ({
             "count": 0,
@@ -932,8 +933,14 @@ describe("Yjs middleware in React", () =>
           })
       ));
 
+    const storeUpdateSpy = jest.fn();
+    store.subscribe(storeUpdateSpy);
+
     expect(updateSpy).toHaveBeenCalledTimes(0);
-    setState((state) => ({ "count": state.count + 1, }));
+    expect(storeUpdateSpy).toHaveBeenCalledTimes(0);
+    store.setState((state) =>
+      ({ "count": state.count + 1, }));
     expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(storeUpdateSpy).toHaveBeenCalledTimes(1);
   });
 });
