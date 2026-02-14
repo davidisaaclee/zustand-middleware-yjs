@@ -323,6 +323,87 @@ describe("patchSharedType", () =>
     expect(ymap.get("state").get(0)
       .toString()).toBe("bar");
   });
+
+  describe("when children are plain values instead of Yjs shared types", () =>
+  {
+    it("Converts a plain object child in a Y.Map to a Y.Map on update", () =>
+    {
+      // Simulate a Y.Map whose child was stored as a plain object
+      // (e.g. via direct Y.Doc manipulation or persistence).
+      ymap.set("state", new Y.Map());
+      ymap.get("state").set("child", { "foo": 1, "bar": 2 });
+
+      // Verify precondition: child is NOT a Y.Map
+      expect(ymap.get("state").get("child")).not.toBeInstanceOf(Y.Map);
+
+      // Patch should not throw, and should convert + apply the update
+      patchSharedType(ymap.get("state"), { "child": { "foo": 1, "bar": 3 } });
+
+      const child = ymap.get("state").get("child");
+      expect(child).toBeInstanceOf(Y.Map);
+      expect(child.get("bar")).toBe(3);
+      expect(child.get("foo")).toBe(1);
+    });
+
+    it("Converts a plain array child in a Y.Map to a Y.Array on update", () =>
+    {
+      ymap.set("state", new Y.Map());
+      ymap.get("state").set("items", [ 1, 2, 3 ]);
+
+      expect(ymap.get("state").get("items")).not.toBeInstanceOf(Y.Array);
+
+      patchSharedType(ymap.get("state"), { "items": [ 1, 2, 4 ] });
+
+      const items = ymap.get("state").get("items");
+      expect(items).toBeInstanceOf(Y.Array);
+      expect(items.toJSON()).toEqual([ 1, 2, 4 ]);
+    });
+
+    it("Converts a plain string child in a Y.Map to a Y.Text on update", () =>
+    {
+      ymap.set("state", new Y.Map());
+      ymap.get("state").set("name", "alice");
+
+      expect(ymap.get("state").get("name")).not.toBeInstanceOf(Y.Text);
+
+      patchSharedType(ymap.get("state"), { "name": "bob" });
+
+      const name = ymap.get("state").get("name");
+      expect(name).toBeInstanceOf(Y.Text);
+      expect(name.toString()).toBe("bob");
+    });
+
+    it("Converts a plain object child in a Y.Array to a Y.Map on update", () =>
+    {
+      const yarray = new Y.Array();
+      ymap.set("arr", yarray);
+      yarray.push([ { "x": 1 } ]);
+
+      // Yjs stores plain objects pushed into Y.Array as opaque values
+      expect(yarray.get(0)).not.toBeInstanceOf(Y.Map);
+
+      patchSharedType(yarray, [ { "x": 2 } ]);
+
+      const child = yarray.get(0) as Y.Map<any>;
+      expect(child).toBeInstanceOf(Y.Map);
+      expect(child.get("x")).toBe(2);
+    });
+
+    it("Handles deeply nested plain objects", () =>
+    {
+      ymap.set("state", new Y.Map());
+      ymap.get("state").set("nested", { "a": { "b": 1 } });
+
+      expect(ymap.get("state").get("nested")).not.toBeInstanceOf(Y.Map);
+
+      patchSharedType(ymap.get("state"), { "nested": { "a": { "b": 2 } } });
+
+      const nested = ymap.get("state").get("nested");
+      expect(nested).toBeInstanceOf(Y.Map);
+      expect(nested.get("a")).toBeInstanceOf(Y.Map);
+      expect(nested.get("a").get("b")).toBe(2);
+    });
+  });
 });
 
 describe("patchStore", () =>
