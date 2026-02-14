@@ -4,6 +4,22 @@ import { getChanges, } from "./diff";
 import { arrayToYArray, objectToYMap, stringToYText, } from "./mapping";
 import { StoreApi, } from "zustand/vanilla";
 
+const isYSharedType = (v: unknown): v is Y.Map<any> | Y.Array<any> | Y.Text =>
+  v instanceof Y.Map || v instanceof Y.Array || v instanceof Y.Text;
+
+/** Convert a plain JS value to the appropriate Yjs shared type. */
+const valueToYType = (value: any): any =>
+{
+  if (typeof value === "string")
+    return stringToYText(value);
+  else if (value instanceof Array)
+    return arrayToYArray(value);
+  else if (value instanceof Object)
+    return objectToYMap(value);
+  else
+    return value;
+};
+
 /**
  * Diffs sharedType and newState to create a list of changes for transforming
  * the contents of sharedType into that of newState. For every nested, 'pending'
@@ -84,17 +100,35 @@ export const patchSharedType = (
     case ChangeType.PENDING:
       if (sharedType instanceof Y.Map)
       {
-        patchSharedType(
-          sharedType.get(property as string),
-          newState[property as string]
-        );
+        const child = sharedType.get(property as string);
+        if (isYSharedType(child))
+        {
+          patchSharedType(child, newState[property as string]);
+        }
+        else
+        {
+          // Child is not a Yjs shared type (e.g. a plain object stored
+          // directly in the Y.Map). Replace it with a proper shared type.
+          sharedType.set(
+            property as string,
+            valueToYType(newState[property as string])
+          );
+        }
       }
       else if (sharedType instanceof Y.Array)
       {
-        patchSharedType(
-          sharedType.get(property as number),
-          newState[property as number]
-        );
+        const child = sharedType.get(property as number);
+        if (isYSharedType(child))
+        {
+          patchSharedType(child, newState[property as number]);
+        }
+        else
+        {
+          // Child is not a Yjs shared type. Replace it with a proper one.
+          const index = property as number;
+          sharedType.delete(index);
+          sharedType.insert(index, [ valueToYType(newState[index]) ]);
+        }
       }
       break;
 
