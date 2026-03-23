@@ -14,14 +14,19 @@ const isString = (d: Diffable): d is string =>
 const isRecord = (d: Diffable): d is Record<string, any> =>
   !isArray(d) && !isString(d);
 
-export const getChanges = (a: Diffable, b: Diffable): Change[] =>
+export const getChanges = (
+  a: Diffable,
+  b: Diffable,
+  isAtomic: (path: string[]) => boolean = () => false,
+  path: string[] = []
+): Change[] =>
 {
   if (isString(a) && isString(b))
     return getStringChanges(a, b);
   else if (isArray(a) && isArray(b))
     return getArrayChanges(a, b);
   else if (isRecord(a) && isRecord(b))
-    return getRecordChanges(a, b);
+    return getRecordChanges(a, b, isAtomic, path);
   else
     return [];
 };
@@ -129,7 +134,9 @@ const getArrayChanges = (a: Array<any>, b: Array<any>): Change[] =>
 
 const getRecordChanges = (
   a: Record<string, any>,
-  b: Record<string, any>
+  b: Record<string, any>,
+  isAtomic: (path: string[]) => boolean = () => false,
+  path: string[] = []
 ): Change[] =>
 {
   const changeList: Change[] = [];
@@ -142,12 +149,26 @@ const getRecordChanges = (
 
   Object.entries(b).forEach(([ property, value ]) =>
   {
+    const currentPath = [ ...path, property ];
+
     if (!(property in a))
       changeList.push([ ChangeType.INSERT, property, value ]);
 
+    else if (isAtomic(currentPath))
+    {
+      // Atomic: skip recursive diff, use reference equality (or length+JSON for arrays).
+      const aVal = a[property];
+      const changed = Array.isArray(aVal) && Array.isArray(value)
+        ? aVal.length !== value.length || JSON.stringify(aVal) !== JSON.stringify(value)
+        : aVal !== value;
+
+      if (changed)
+        changeList.push([ ChangeType.UPDATE, property, value ]);
+    }
+
     else if (isDiffable(a[property]) && isDiffable(value))
     {
-      const d = getChanges(a[property], value);
+      const d = getChanges(a[property], value, isAtomic, currentPath);
 
       if (d.length !== 0)
         changeList.push([ ChangeType.PENDING, property, d ]);

@@ -41,7 +41,7 @@ export const patchSharedType = (
   path: string[] = []
 ): void =>
 {
-  const changes = getChanges(sharedType.toJSON(), newState);
+  const changes = getChanges(sharedType.toJSON(), newState, isAtomic, path);
 
   changes.forEach(([ type, property, value ]) =>
   {
