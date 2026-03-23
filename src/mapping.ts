@@ -25,7 +25,7 @@ export const arrayToYArray = (array: any[]): Y.Array<any> =>
     if (value instanceof Array)
       yarray.push([ arrayToYArray(value) ]);
 
-    else if (value instanceof Object)
+    else if (isPlainObject(value))
       yarray.push([ objectToYMap(value) ]);
 
     else if (typeof value === "string")
@@ -93,7 +93,10 @@ export const yArrayToArray = (yarray: Y.Array<any>): any[] =>
  * @param object The object to turn into a YMap shared type.
  * @returns A YMap.
  */
-export const objectToYMap = (object: any): Y.Map<any> =>
+export const isPlainObject = (v: unknown): v is Record<string | number | symbol, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+export const objectToYMap = (object: Record<string | number | symbol, unknown>): Y.Map<any> =>
 {
   const ymap = new Y.Map();
 
@@ -102,7 +105,7 @@ export const objectToYMap = (object: any): Y.Map<any> =>
     if (value instanceof Array)
       ymap.set(property, arrayToYArray(value));
 
-    else if (value instanceof Object)
+    else if (isPlainObject(value))
       ymap.set(property, objectToYMap(value));
 
     else if (typeof value === "string")

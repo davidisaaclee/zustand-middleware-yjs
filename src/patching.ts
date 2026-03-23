@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { ChangeType, Change, } from "./types";
 import { getChanges, } from "./diff";
-import { arrayToYArray, objectToYMap, stringToYText, } from "./mapping";
+import { arrayToYArray, isPlainObject, objectToYMap, stringToYText, } from "./mapping";
 import { StoreApi, } from "zustand/vanilla";
 
 const isYSharedType = (v: unknown): v is Y.Map<any> | Y.Array<any> | Y.Text =>
@@ -14,7 +14,7 @@ const valueToYType = (value: any): any =>
     return stringToYText(value);
   else if (value instanceof Array)
     return arrayToYArray(value);
-  else if (value instanceof Object)
+  else if (isPlainObject(value))
     return objectToYMap(value);
   else
     return value;
@@ -51,7 +51,7 @@ export const patchSharedType = (
             sharedType.set(property as string, stringToYText(value));
           else if (value instanceof Array)
             sharedType.set(property as string, arrayToYArray(value));
-          else if (value instanceof Object)
+          else if (isPlainObject(value))
             sharedType.set(property as string, objectToYMap(value));
           else
             sharedType.set(property as string, value);
@@ -68,7 +68,7 @@ export const patchSharedType = (
             sharedType.insert(index, [ stringToYText(value) ]);
           else if (value instanceof Array)
             sharedType.insert(index, [ arrayToYArray(value) ]);
-          else if (value instanceof Object)
+          else if (isPlainObject(value))
             sharedType.insert(index, [ objectToYMap(value) ]);
           else
             sharedType.insert(index, [ value ]);
