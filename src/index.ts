@@ -106,7 +106,7 @@ const yjs: YjsImpl = <S extends unknown>(
     map.observeDeep((_events, txn) =>
     {
       if (txn.origin === selfTxnOrigin) return;
-      patchStore(originalApi, map.toJSON());
+      patchStore(originalApi, map.toJSON(), isAtomic);
     });
 
     // Return the initial state to create or the next middleware.

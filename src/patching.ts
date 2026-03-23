@@ -181,9 +181,13 @@ export const patchSharedType = (
  * @returns The patched oldState, identical to newState.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-export const patchState = (oldState: any, newState: any): any =>
+export const patchState = (
+  oldState: any,
+  newState: any,
+  isAtomic: (path: string[]) => boolean = () => false
+): any =>
 {
-  const changes = getChanges(oldState, newState);
+  const changes = getChanges(oldState, newState, isAtomic);
 
   const applyChanges = (
     state: (string | any[] | Record<string, any>),
@@ -325,7 +329,8 @@ export const patchState = (oldState: any, newState: any): any =>
 export const patchStore = <S extends unknown>(
   store: StoreApi<S>,
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  newState: any
+  newState: any,
+  isAtomic: (path: string[]) => boolean = () => false
 ): void =>
 {
   // Clone the oldState instead of using it directly from store.getState().
@@ -334,7 +339,7 @@ export const patchStore = <S extends unknown>(
   };
 
   store.setState(
-    patchState(oldState, newState),
+    patchState(oldState, newState, isAtomic),
     true // Replace with the patched state.
   );
 };
