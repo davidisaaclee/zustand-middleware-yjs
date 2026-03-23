@@ -16,17 +16,29 @@ import * as Y from "yjs";
  * @param array The array to transform into a YArray
  * @returns A YArray.
  */
-export const arrayToYArray = (array: any[]): Y.Array<any> =>
+export const arrayToYArray = (
+  array: any[],
+  isAtomic: (path: string[]) => boolean = () => false,
+  path: string[] = []
+): Y.Array<any> =>
 {
   const yarray = new Y.Array();
 
-  array.forEach((value) =>
+  array.forEach((value, index) =>
   {
-    if (value instanceof Array)
-      yarray.push([ arrayToYArray(value) ]);
+    const currentPath = [ ...path, String(index) ];
+
+    if (typeof value === "function")
+      return;
+
+    else if (isAtomic(currentPath))
+      yarray.push([ value ]);
+
+    else if (value instanceof Array)
+      yarray.push([ arrayToYArray(value, isAtomic, currentPath) ]);
 
     else if (isPlainObject(value))
-      yarray.push([ objectToYMap(value) ]);
+      yarray.push([ objectToYMap(value, isAtomic, currentPath) ]);
 
     else if (typeof value === "string")
       yarray.push([ stringToYText(value) ]);
@@ -96,7 +108,11 @@ export const yArrayToArray = (yarray: Y.Array<any>): any[] =>
 export const isPlainObject = (v: unknown): v is Record<string | number | symbol, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-export const objectToYMap = (object: Record<string | number | symbol, unknown>): Y.Map<any> =>
+export const objectToYMap = (
+  object: Record<string | number | symbol, unknown>,
+  isAtomic: (path: string[]) => boolean = () => false,
+  path: string[] = []
+): Y.Map<any> =>
 {
   const ymap = new Y.Map();
 
@@ -105,11 +121,16 @@ export const objectToYMap = (object: Record<string | number | symbol, unknown>):
     if (typeof value === "function")
       return;
 
+    const currentPath = [ ...path, property ];
+
+    if (isAtomic(currentPath))
+      ymap.set(property, value);
+
     else if (value instanceof Array)
-      ymap.set(property, arrayToYArray(value));
+      ymap.set(property, arrayToYArray(value, isAtomic, currentPath));
 
     else if (isPlainObject(value))
-      ymap.set(property, objectToYMap(value));
+      ymap.set(property, objectToYMap(value, isAtomic, currentPath));
 
     else if (typeof value === "string")
       ymap.set(property, stringToYText(value));

@@ -693,6 +693,95 @@ describe("Yjs middleware", () =>
     expect(store1.getState().text).toContain("END");
     expect(store2.getState().text).toBe(store1.getState().text);
   });
+
+  it("Stores atomic fields as raw values and merges Y.Text fields on concurrent edits", () =>
+  {
+    /**
+     * `atomic` is declared atomic via the path predicate, so it is stored as a
+     * plain value in the Y.Map (last-write-wins on concurrent update).
+     * `text` is a regular string, so it is stored as Y.Text (CRDT merge).
+     */
+    type Store =
+    {
+      atomic: string,
+      text: string,
+    };
+
+    const doc1 = new Y.Doc();
+    const doc2 = new Y.Doc();
+
+    const storeName = "store";
+
+    // `atomic` at the root level is treated as an atomic value (no Y.Text / Y.Map).
+    const isAtomic = (path: string[]) => path.join(".") === "atomic";
+
+    // Docs are connected initially so that the first setState (which writes the
+    // shared initial state into the Y.Doc) propagates to both peers. This ensures
+    // both docs hold the *same* Y.Text object for "text" before we fork — a
+    // prerequisite for Y.Text CRDT merging to work on concurrent edits.
+    let connected = false;
+    doc1.on("update", (u: Uint8Array) => { if (connected) Y.applyUpdate(doc2, u); });
+    doc2.on("update", (u: Uint8Array) => { if (connected) Y.applyUpdate(doc1, u); });
+
+    const store1 = createVanilla<Store>(yjs(
+      doc1,
+      storeName,
+      () => ({ "atomic": "initial", "text": "hello", }),
+      { isAtomic }
+    ));
+
+    const store2 = createVanilla<Store>(yjs(
+      doc2,
+      storeName,
+      () => ({ "atomic": "initial", "text": "hello", }),
+      { isAtomic }
+    ));
+
+    // Write the initial state into the Y.Doc while connected so that both docs
+    // receive the same Y.Text object for "text".
+    connected = true;
+    store1.setState({ "atomic": "initial", "text": "hello", });
+
+    expect(store1.getState().atomic).toBe("initial");
+    expect(store2.getState().atomic).toBe("initial");
+    expect(store1.getState().text).toBe("hello");
+    expect(store2.getState().text).toBe("hello");
+
+    // Capture state vectors at the fork point so we can exchange only the
+    // diverged updates later.
+    const sv1 = Y.encodeStateVector(doc1);
+    const sv2 = Y.encodeStateVector(doc2);
+
+    // --- Fork: disconnect so each doc accumulates its own updates independently ---
+    connected = false;
+
+    // Doc1 prepends to text, doc2 appends — edits at different positions so
+    // both survive the Y.Text CRDT merge.
+    store1.setState({ "atomic": "from-peer-1", "text": "START hello", });
+    store2.setState({ "atomic": "from-peer-2", "text": "hello END", });
+
+    // Exchange only the updates that occurred after the fork.
+    Y.applyUpdate(doc2, Y.encodeStateAsUpdate(doc1, sv2));
+    Y.applyUpdate(doc1, Y.encodeStateAsUpdate(doc2, sv1));
+
+    // text: both edits should be present after merge.
+    expect(store1.getState().text).toContain("START");
+    expect(store1.getState().text).toContain("END");
+
+    // atomic: exactly one peer's value wins — no concatenation or partial merge.
+    const atomicResult = store1.getState().atomic;
+    expect([ "from-peer-1", "from-peer-2" ]).toContain(atomicResult);
+    expect(atomicResult).not.toContain("from-peer-1from-peer-2");
+    expect(atomicResult).not.toContain("from-peer-2from-peer-1");
+
+    // Both peers converge to the same state.
+    expect(store2.getState().text).toBe(store1.getState().text);
+    expect(store2.getState().atomic).toBe(store1.getState().atomic);
+
+    // check exact type
+    expect(doc1.getMap("store").get("text")).toBeInstanceOf(Y.Text);
+    expect(typeof doc1.getMap("store").get("atomic")).toEqual('string');
+  });
 });
 
 describe("Yjs middleware with network provider", () =>

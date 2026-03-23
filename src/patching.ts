@@ -8,14 +8,18 @@ const isYSharedType = (v: unknown): v is Y.Map<any> | Y.Array<any> | Y.Text =>
   v instanceof Y.Map || v instanceof Y.Array || v instanceof Y.Text;
 
 /** Convert a plain JS value to the appropriate Yjs shared type. */
-const valueToYType = (value: any): any =>
+const valueToYType = (
+  value: any,
+  isAtomic: (path: string[]) => boolean,
+  path: string[]
+): any =>
 {
   if (typeof value === "string")
     return stringToYText(value);
   else if (value instanceof Array)
-    return arrayToYArray(value);
+    return arrayToYArray(value, isAtomic, path);
   else if (isPlainObject(value))
-    return objectToYMap(value);
+    return objectToYMap(value, isAtomic, path);
   else
     return value;
 };
@@ -32,7 +36,9 @@ const valueToYType = (value: any): any =>
 export const patchSharedType = (
   sharedType: Y.Map<any> | Y.Array<any> | Y.Text,
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  newState: any
+  newState: any,
+  isAtomic: (path: string[]) => boolean = () => false,
+  path: string[] = []
 ): void =>
 {
   const changes = getChanges(sharedType.toJSON(), newState);
@@ -47,29 +53,37 @@ export const patchSharedType = (
       {
         if (sharedType instanceof Y.Map)
         {
-          if (typeof value === "string")
-            sharedType.set(property as string, stringToYText(value));
+          const prop = property as string;
+          const currentPath = [ ...path, prop ];
+
+          if (isAtomic(currentPath))
+            sharedType.set(prop, value);
+          else if (typeof value === "string")
+            sharedType.set(prop, stringToYText(value));
           else if (value instanceof Array)
-            sharedType.set(property as string, arrayToYArray(value));
+            sharedType.set(prop, arrayToYArray(value, isAtomic, currentPath));
           else if (isPlainObject(value))
-            sharedType.set(property as string, objectToYMap(value));
+            sharedType.set(prop, objectToYMap(value, isAtomic, currentPath));
           else
-            sharedType.set(property as string, value);
+            sharedType.set(prop, value);
         }
 
         else if (sharedType instanceof Y.Array)
         {
           const index = property as number;
+          const currentPath = [ ...path, String(index) ];
 
           if (type === ChangeType.UPDATE)
             sharedType.delete(index);
 
-          if (typeof value === "string")
+          if (isAtomic(currentPath))
+            sharedType.insert(index, [ value ]);
+          else if (typeof value === "string")
             sharedType.insert(index, [ stringToYText(value) ]);
           else if (value instanceof Array)
-            sharedType.insert(index, [ arrayToYArray(value) ]);
+            sharedType.insert(index, [ arrayToYArray(value, isAtomic, currentPath) ]);
           else if (isPlainObject(value))
-            sharedType.insert(index, [ objectToYMap(value) ]);
+            sharedType.insert(index, [ objectToYMap(value, isAtomic, currentPath) ]);
           else
             sharedType.insert(index, [ value ]);
         }
@@ -100,34 +114,52 @@ export const patchSharedType = (
     case ChangeType.PENDING:
       if (sharedType instanceof Y.Map)
       {
-        const child = sharedType.get(property as string);
-        if (isYSharedType(child))
+        const prop = property as string;
+        const currentPath = [ ...path, prop ];
+
+        if (isAtomic(currentPath))
         {
-          patchSharedType(child, newState[property as string]);
+          // Atomic: bypass CRDT merge, replace the whole value directly.
+          sharedType.set(prop, newState[prop]);
         }
         else
         {
-          // Child is not a Yjs shared type (e.g. a plain object stored
-          // directly in the Y.Map). Replace it with a proper shared type.
-          sharedType.set(
-            property as string,
-            valueToYType(newState[property as string])
-          );
+          const child = sharedType.get(prop);
+          if (isYSharedType(child))
+          {
+            patchSharedType(child, newState[prop], isAtomic, currentPath);
+          }
+          else
+          {
+            // Child is not a Yjs shared type (e.g. a plain object stored
+            // directly in the Y.Map). Replace it with a proper shared type.
+            sharedType.set(prop, valueToYType(newState[prop], isAtomic, currentPath));
+          }
         }
       }
       else if (sharedType instanceof Y.Array)
       {
-        const child = sharedType.get(property as number);
-        if (isYSharedType(child))
+        const index = property as number;
+        const currentPath = [ ...path, String(index) ];
+
+        if (isAtomic(currentPath))
         {
-          patchSharedType(child, newState[property as number]);
+          sharedType.delete(index);
+          sharedType.insert(index, [ newState[index] ]);
         }
         else
         {
-          // Child is not a Yjs shared type. Replace it with a proper one.
-          const index = property as number;
-          sharedType.delete(index);
-          sharedType.insert(index, [ valueToYType(newState[index]) ]);
+          const child = sharedType.get(index);
+          if (isYSharedType(child))
+          {
+            patchSharedType(child, newState[index], isAtomic, currentPath);
+          }
+          else
+          {
+            // Child is not a Yjs shared type. Replace it with a proper one.
+            sharedType.delete(index);
+            sharedType.insert(index, [ valueToYType(newState[index], isAtomic, currentPath) ]);
+          }
         }
       }
       break;

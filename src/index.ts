@@ -5,6 +5,10 @@ import {
 import * as Y from "yjs";
 import { patchSharedType, patchStore, } from "./patching";
 
+type Opts = Partial<{
+    isAtomic: (path: string[]) => boolean
+}>;
+
 type Yjs = <
   T extends unknown,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
@@ -12,13 +16,15 @@ type Yjs = <
 >(
   doc: Y.Doc,
   name: string,
-  f: StateCreator<T, Mps, Mcs>
+  f: StateCreator<T, Mps, Mcs>,
+  opts?: Opts
 ) => StateCreator<T, Mps, Mcs>;
 
 type YjsImpl = <T extends unknown>(
   doc: Y.Doc,
   name: string,
-  config: StateCreator<T, [], []>
+  config: StateCreator<T, [], []>,
+  opts?: Opts
 ) => StateCreator<T, [], []>;
 
 
@@ -46,7 +52,10 @@ type YjsImpl = <T extends unknown>(
 const yjs: YjsImpl = <S extends unknown>(
   doc: Y.Doc,
   name: string,
-  config: StateCreator<S>
+  config: StateCreator<S>,
+  {
+    isAtomic = () => false,
+  }: Opts = {}
 ): StateCreator<S> =>
 {
   // A value to identify Yjs transactions that we have initiated.
@@ -67,7 +76,7 @@ const yjs: YjsImpl = <S extends unknown>(
     {
       originalApi.setState(partial, replace);
       doc.transact(() =>
-        patchSharedType(map, api.getState()), selfTxnOrigin);
+        patchSharedType(map, api.getState(), isAtomic), selfTxnOrigin);
     };
 
     /*
@@ -83,7 +92,7 @@ const yjs: YjsImpl = <S extends unknown>(
       {
         set(partial, replace);
         doc.transact(() =>
-          patchSharedType(map, get()), selfTxnOrigin);
+          patchSharedType(map, get(), isAtomic), selfTxnOrigin);
       },
       get,
       api
