@@ -102,7 +102,10 @@ export const objectToYMap = (object: Record<string | number | symbol, unknown>):
 
   Object.entries(object).forEach(([ property, value ]) =>
   {
-    if (value instanceof Array)
+    if (typeof value === "function")
+      return;
+
+    else if (value instanceof Array)
       ymap.set(property, arrayToYArray(value));
 
     else if (isPlainObject(value))
