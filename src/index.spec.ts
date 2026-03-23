@@ -654,6 +654,45 @@ describe("Yjs middleware", () =>
       }).not.toThrow();
     });
   });
+
+  it("Stores strings as Y.Text and merges concurrent edits", () =>
+  {
+    type Store = { text: string };
+
+    const doc1 = new Y.Doc();
+    const doc2 = new Y.Doc();
+
+    let connected = false;
+    doc1.on("update", (u: Uint8Array) => { if (connected) Y.applyUpdate(doc2, u); });
+    doc2.on("update", (u: Uint8Array) => { if (connected) Y.applyUpdate(doc1, u); });
+
+    const store1 = createVanilla<Store>(yjs(doc1, "store", () => ({ "text": "hello", })));
+    const store2 = createVanilla<Store>(yjs(doc2, "store", () => ({ "text": "hello", })));
+
+    // Write initial state into the Y.Doc and sync both peers to the same Y.Text object.
+    connected = true;
+    store1.setState({ "text": "hello", });
+
+    const sv1 = Y.encodeStateVector(doc1);
+    const sv2 = Y.encodeStateVector(doc2);
+
+    // Verify that the string is stored as Y.Text, not a raw value.
+    expect(doc1.getMap("store").get("text")).toBeInstanceOf(Y.Text);
+
+    connected = false;
+
+    // Concurrent edits at non-overlapping positions.
+    store1.setState({ "text": "START hello", });
+    store2.setState({ "text": "hello END", });
+
+    Y.applyUpdate(doc2, Y.encodeStateAsUpdate(doc1, sv2));
+    Y.applyUpdate(doc1, Y.encodeStateAsUpdate(doc2, sv1));
+
+    // Both edits should survive the Y.Text CRDT merge.
+    expect(store1.getState().text).toContain("START");
+    expect(store1.getState().text).toContain("END");
+    expect(store2.getState().text).toBe(store1.getState().text);
+  });
 });
 
 describe("Yjs middleware with network provider", () =>
